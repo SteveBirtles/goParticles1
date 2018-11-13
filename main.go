@@ -19,14 +19,17 @@ const (
 	windowWidth  = 1280
 	windowHeight = 720
 	numParticles = 1000000
+	threads      = 4
 )
 
 var (
 	frames            = 0
 	second            = time.Tick(time.Second)
-	frameLength       float64
 	windowTitlePrefix = "Particles"
 	vao               uint32
+	particles         []mgl32.Vec4
+	velocities        []mgl32.Vec4
+	done              = make(chan bool, threads)
 )
 
 func init() {
@@ -64,6 +67,40 @@ func LoadShader(path string, shaderType uint32) uint32 {
 	return shader
 }
 
+func updateParticles(start, end int) {
+
+	if end > len(particles) {
+		end = len(particles)
+	}
+
+	for i := start; i < end; i++ {
+
+		t := float32(0.01)
+
+		pPos := particles[i]
+		vPos := velocities[i]
+
+		d := float32(math.Hypot(float64(vPos.X()), math.Hypot(float64(vPos.Y()), float64(vPos.Z()))))
+
+		var g mgl32.Vec3
+		g[0] = float32(pPos.X()/d) * -9.0
+		g[1] = float32(pPos.Y()/d) * -9.0
+		g[2] = float32(pPos.Z()/d) * -9.0
+
+		particles[i][0] = float32(pPos.X() + vPos.X()*t + 0.5*t*t*g.X())
+		particles[i][1] = float32(pPos.Y() + vPos.Y()*t + 0.5*t*t*g.Y())
+		particles[i][2] = float32(pPos.Z() + vPos.Z()*t + 0.5*t*t*g.Z())
+
+		velocities[i][0] = vPos.X() + g.X()*t
+		velocities[i][1] = vPos.Y() + g.Y()*t
+		velocities[i][2] = vPos.Z() + g.Z()*t
+
+	}
+
+	done <- true
+
+}
+
 func main() {
 
 	var err error
@@ -89,19 +126,11 @@ func main() {
 	gl.ClearColor(0.0, 0.0, 0.0, 1.0)
 	glfw.SwapInterval(0)
 
-	particleShader := LoadShader("shaders/particles.glsl", gl.COMPUTE_SHADER)
 	vertexShader := LoadShader("shaders/vert.glsl", gl.VERTEX_SHADER)
 	fragmentShader := LoadShader("shaders/frag.glsl", gl.FRAGMENT_SHADER)
 
-	particleProg := gl.CreateProgram()
-	gl.AttachShader(particleProg, particleShader)
-	gl.LinkProgram(particleProg)
-	gl.UseProgram(particleProg)
-
 	posSSBO := uint32(1)
 	velSSBO := uint32(2)
-
-	var points, velocities []mgl32.Vec4
 
 	for i := 0; i < numParticles; i++ {
 		for {
@@ -111,14 +140,14 @@ func main() {
 			if math.Hypot(float64(x), math.Hypot(float64(y), float64(z))) > 32 {
 				continue
 			}
-			points = append(points, mgl32.Vec4{x, y, z, 1})
+			particles = append(particles, mgl32.Vec4{x, y, z, 1})
 			break
 		}
 	}
 
 	gl.GenBuffers(1, &posSSBO)
 	gl.BindBuffer(gl.SHADER_STORAGE_BUFFER, posSSBO)
-	gl.BufferData(gl.SHADER_STORAGE_BUFFER, numParticles*16, gl.Ptr(points), gl.DYNAMIC_DRAW)
+	gl.BufferData(gl.SHADER_STORAGE_BUFFER, numParticles*16, gl.Ptr(particles), gl.DYNAMIC_DRAW)
 	gl.BindBufferBase(gl.SHADER_STORAGE_BUFFER, 0, posSSBO)
 
 	for i := 0; i < numParticles; i++ {
@@ -166,17 +195,30 @@ func main() {
 
 	for !window.ShouldClose() {
 
-		frameStart := time.Now()
-
 		if window.GetKey(glfw.KeyEscape) == glfw.Press {
 			window.SetShouldClose(true)
 		}
 
 		/* --------------------------- */
 
-		gl.UseProgram(particleProg)
-		gl.DispatchCompute(1024, 1, 1)
-		gl.MemoryBarrier(gl.VERTEX_ATTRIB_ARRAY_BARRIER_BIT)
+		batchSize := (len(particles) + threads) / 4
+
+		for i := 0; i < threads; i++ {
+			go updateParticles(i*batchSize, (i+1)*batchSize)
+		}
+
+		for {
+			if len(done) == 4 {
+				for len(done) > 0 {
+					<-done
+				}
+				break
+			}
+		}
+
+		gl.BindBuffer(gl.SHADER_STORAGE_BUFFER, posSSBO)
+		gl.BufferData(gl.SHADER_STORAGE_BUFFER, numParticles*16, gl.Ptr(particles), gl.DYNAMIC_DRAW)
+		gl.BindBufferBase(gl.SHADER_STORAGE_BUFFER, 0, posSSBO)
 
 		gl.UseProgram(quadProg)
 		gl.ClearColor(0, 0, 0, 1)
@@ -197,7 +239,6 @@ func main() {
 			frames = 0
 		default:
 		}
-		frameLength = time.Since(frameStart).Seconds()
 
 	}
 
