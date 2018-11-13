@@ -1,7 +1,6 @@
 package main
 
 import (
-	"engo/math"
 	"fmt"
 	"github.com/go-gl/gl/v4.3-core/gl"
 	"github.com/go-gl/glfw/v3.2/glfw"
@@ -9,6 +8,7 @@ import (
 	_ "image/png"
 	"io/ioutil"
 	"log"
+	"math"
 	"math/rand"
 	"runtime"
 	"strings"
@@ -16,7 +16,7 @@ import (
 )
 
 const (
-	windowWidth = 1280
+	windowWidth  = 1280
 	windowHeight = 720
 	numParticles = 1000000
 )
@@ -26,7 +26,7 @@ var (
 	second            = time.Tick(time.Second)
 	frameLength       float64
 	windowTitlePrefix = "Particles"
-	vao 			  uint32
+	vao               uint32
 )
 
 func init() {
@@ -108,7 +108,7 @@ func main() {
 			x := (rand.Float32()*2 - 1) * float32(32)
 			y := (rand.Float32()*2 - 1) * float32(32)
 			z := (rand.Float32()*2 - 1) * float32(32)
-			if math.Hypot(x, math.Hypot(y, z)) > 32 {
+			if math.Hypot(float64(x), math.Hypot(float64(y), float64(z))) > 32 {
 				continue
 			}
 			points = append(points, mgl32.Vec4{x, y, z, 1})
@@ -126,7 +126,7 @@ func main() {
 			x := (rand.Float32()*2 - 1) * float32(10.0)
 			y := (rand.Float32()*2 - 1) * float32(10.0)
 			z := (rand.Float32()*2 - 1) * float32(10.0)
-			if math.Hypot(x, math.Hypot(y, z)) > 10 {
+			if math.Hypot(float64(x), math.Hypot(float64(y), float64(z))) > 10 {
 				continue
 			}
 			velocities = append(velocities, mgl32.Vec4{x, y, z, 0})
