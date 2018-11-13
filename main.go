@@ -19,7 +19,7 @@ const (
 	windowWidth  = 1280
 	windowHeight = 720
 	numParticles = 1000000
-	threads      = 4
+	threads      = 1
 )
 
 var (
@@ -189,14 +189,14 @@ func main() {
 
 		/* --------------------------- */
 
-		batchSize := (len(particles) + threads) / 4
+		batchSize := (len(particles) + threads) / threads
 
 		for i := 0; i < threads; i++ {
 			go updateParticles(i*batchSize, (i+1)*batchSize)
 		}
 
 		for {
-			if len(done) == 4 {
+			if len(done) == threads {
 				for len(done) > 0 {
 					<-done
 				}
